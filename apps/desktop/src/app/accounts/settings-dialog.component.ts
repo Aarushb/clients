@@ -495,7 +495,14 @@ export class SettingsDialogComponent implements OnInit {
       // If the user doesn't have a MP or PIN then they have to use biometrics on app restart.
       if (!this.userHasMasterPassword() && !this.userHasPinSet()) {
         // Allow biometric unlock on app restart so the user doesn't get into a bad state.
-        await this.enrollPersistentBiometricIfNeeded(activeUserId);
+        // A failed enrollment (e.g. cancelled Windows Hello prompt) is not fatal: the session
+        // key below must still be stored and validated.
+        try {
+          await this.enrollPersistentBiometricIfNeeded(activeUserId);
+        } catch (error) {
+          this.logService.error("Error enrolling persistent biometric unlock: ", error);
+          this.validationService.showError(error);
+        }
       } else {
         this.form.controls.requireMasterPasswordOnAppRestart.setValue(true);
       }

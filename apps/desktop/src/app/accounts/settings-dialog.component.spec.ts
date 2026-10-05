@@ -793,6 +793,47 @@ describe("SettingsDialogComponent", () => {
             expect(messagingService.send).toHaveBeenCalledWith("redrawMenu");
           });
 
+          // A failed persistent enrollment (e.g. a cancelled Windows Hello prompt) must not skip
+          // storing the session biometric key, nor the validation that reverts the enabled flag.
+          it("still stores the biometric unlock key when persistent enrollment fails", async () => {
+            const enrollmentError = new Error("Windows Hello cancelled");
+            (component as any).userHasMasterPassword.set(false);
+            (component as any).userHasPinSet.set(false);
+            desktopBiometricsService.hasPersistentKey.mockResolvedValue(false);
+            desktopBiometricsService.enrollPersistent.mockRejectedValue(enrollmentError);
+
+            await (component as any).updateBiometricHandler(true);
+
+            expect(validationService.showError).toHaveBeenCalledWith(enrollmentError);
+            expect(
+              desktopBiometricsService.setBiometricProtectedUnlockKeyForUser,
+            ).toHaveBeenCalledWith(mockUserId, mockUserKey);
+            expect((component as any).form.controls.requireMasterPasswordOnAppRestart.value).toBe(
+              true,
+            );
+            expect((component as any).form.controls.biometric.value).toBe(true);
+          });
+
+          it("disables biometric unlock when persistent enrollment fails and no key is stored", async () => {
+            (component as any).userHasMasterPassword.set(false);
+            (component as any).userHasPinSet.set(false);
+            desktopBiometricsService.hasPersistentKey.mockResolvedValue(false);
+            desktopBiometricsService.enrollPersistent.mockRejectedValue(
+              new Error("Windows Hello cancelled"),
+            );
+            desktopBiometricsService.getBiometricsStatusForUser.mockResolvedValue(
+              BiometricsStatus.UnlockNeeded,
+            );
+
+            await (component as any).updateBiometricHandler(true);
+
+            expect(biometricStateService.setBiometricUnlockEnabled).toHaveBeenLastCalledWith(
+              false,
+              mockUserId,
+            );
+            expect((component as any).form.controls.biometric.value).toBe(false);
+          });
+
           test.each([
             [true, true],
             [true, false],
